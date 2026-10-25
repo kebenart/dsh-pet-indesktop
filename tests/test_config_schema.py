@@ -44,6 +44,7 @@ RELOAD_WHITELIST_SNAPSHOT = frozenset(
         "balance_tier_label_idle",
         "balance_tier_label_peak",
         "balance_tier_labels_mode",
+        "bubble_voice_enabled",
         "character",
         "character_aliases",
         "character_profiles",
@@ -247,6 +248,9 @@ SPECIAL_CASED_KEYS = frozenset({"version", "proactive_screen", "agent_link", "ch
 # 一次；共创者定稿的 token 成本闸），白名单 159。
 # 2026-10-22 加场景扮演 3 键（roleplay_enabled / roleplay_scene / roleplay_cast；
 # 每宠键，默认关/空），白名单 162。
+# 2026-10-25 加气泡朗读 1 键（bubble_voice_enabled，默认 False：把所有气泡文本
+# 念出来——自言自语/看看屏幕/余额/天气/审批等；复用语音报时那条音频通道，
+# 不新增音色/语速/音量键），白名单 163。
 DEFAULTS_SNAPSHOT = RELOAD_WHITELIST_SNAPSHOT | SPECIAL_CASED_KEYS
 
 

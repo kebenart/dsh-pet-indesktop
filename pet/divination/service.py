@@ -256,7 +256,14 @@ class DivinationService:
                 return
             if not window_alerts.bubble_blocked(win):
                 try:
-                    win.show_bubble(text, duration_ms=_bubble_ms(text))
+                    from .. import bubble_voice
+
+                    # 自带「语音播报」时由 _speak 念，气泡朗读让位；关着则交给气泡朗读。
+                    if self._cfg.get("speak"):
+                        with bubble_voice.muted():
+                            win.show_bubble(text, duration_ms=_bubble_ms(text))
+                    else:
+                        win.show_bubble(text, duration_ms=_bubble_ms(text))
                     return
                 except Exception:
                     logger.exception("抽签气泡展示失败")
@@ -265,7 +272,13 @@ class DivinationService:
                 rect = win.visible_content_rect()
                 scale = getattr(win, "scale", 1.0)
                 if bubble is not None and rect is not None:
-                    bubble.show_text(text, rect, _bubble_ms(text), pet_scale=scale, subtitle="")
+                    from .. import bubble_voice
+
+                    if self._cfg.get("speak"):
+                        with bubble_voice.muted():
+                            bubble.show_text(text, rect, _bubble_ms(text), pet_scale=scale, subtitle="")
+                    else:
+                        bubble.show_text(text, rect, _bubble_ms(text), pet_scale=scale, subtitle="")
                     return
             except Exception:
                 logger.exception("抽签气泡降级展示失败")

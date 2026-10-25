@@ -220,7 +220,15 @@ class FestivalReminderService:
                     return
             else:
                 try:
-                    if win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS):
+                    from .. import bubble_voice
+
+                    # 自带「语音播报」时由 _speak 念，气泡朗读让位；关着则交给气泡朗读。
+                    if self._cfg.get("speak"):
+                        with bubble_voice.muted():
+                            shown = win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS)
+                    else:
+                        shown = win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS)
+                    if shown:
                         return
                 except Exception:
                     logger.exception("节日提醒气泡展示失败")
@@ -243,13 +251,18 @@ class FestivalReminderService:
             rect = win.visible_content_rect()
             scale = getattr(win, "scale", 1.0)
             if bubble is not None and rect is not None:
-                bubble.show_text(
-                    text,
-                    rect,
-                    self.BUBBLE_DURATION_MS,
-                    pet_scale=scale,
-                    subtitle="",
-                )
+                from .. import bubble_voice
+
+                if self._cfg.get("speak"):
+                    with bubble_voice.muted():
+                        bubble.show_text(
+                            text, rect, self.BUBBLE_DURATION_MS, pet_scale=scale, subtitle="",
+                        )
+                else:
+                    bubble.show_text(
+                        text, rect, self.BUBBLE_DURATION_MS, pet_scale=scale, subtitle="",
+                    )
+                return True
                 return True
         except Exception:
             logger.exception("节日提醒气泡降级展示失败")

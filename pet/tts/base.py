@@ -66,6 +66,11 @@ class TtsField:
     hidden_when: tuple[str, object] | None = None
     #: 下拉里没有当前配置值时，是否补一个「自定义：<值>」项（兼容手改配置文件）。
     allow_custom: bool = True
+    #: ``kind="select"`` 是否允许**自由输入**（不只是从清单里挑）。
+    #: 典型：在线音色名由厂家发布、清单必然滞后——豆包 2.0 的音色在控制台里一长串，
+    #: 写死清单等于用户每换一个音色就要等一次发版。开了它，设置页给的是可输入的
+    #: 文本框 + 一个「常用音色」下拉，输入内容原样进配置（provider 的 clean 负责兜底）。
+    editable: bool = False
 
 
 @dataclass

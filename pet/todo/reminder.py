@@ -413,7 +413,15 @@ class TodoReminderService:
         # 让路），此时**不许**当成已送达——戳已经盖过了，用户就再也等不到这一条。
         delivered = False
         if win is not None and win.isVisible() and not self._bubble_suppressed():
-            delivered = bool(win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS))
+            # 自己的「语音播报」开着就由 _speak_fire 念（这里让位，避免念两遍）；
+            # 关着则交给气泡朗读（设置 → 语音 → 气泡朗读），提醒不至于只剩字。
+            if self._prefs.get("speak"):
+                from .. import bubble_voice
+
+                with bubble_voice.muted():
+                    delivered = bool(win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS))
+            else:
+                delivered = bool(win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS))
         if not delivered and self._notify_enabled:
             notify = getattr(app, "system_notify", None)
             if callable(notify):

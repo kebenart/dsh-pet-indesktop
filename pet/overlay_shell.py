@@ -3019,7 +3019,7 @@ class OverlayShell(QObject):
         """周期定时器到点（``window_alerts.on_self_talk_timeout`` host 形转发）。"""
         window_alerts.on_self_talk_timeout(self)
 
-    def _show_self_talk_text(self, text: str) -> bool:
+    def _show_self_talk_text(self, text: str, *, voice: bool | None = None) -> bool:
         """自言自语文本落地（sprite 版，**不可**直接复用 window_alerts 同名函数）。
 
         差异点：``window_alerts.show_self_talk_text`` 会
@@ -3035,7 +3035,7 @@ class OverlayShell(QObject):
         return self._show_bubble_text(
             str(text), int(self._self_talk_duration_seconds * 1000))
 
-    def _show_random_self_talk(self) -> bool:
+    def _show_random_self_talk(self, *, voice: bool | None = None) -> bool:
         """随机一条自言自语（文本或配图）。
 
         抽样与出图概率复用 ``window_alerts`` 的纯逻辑函数

@@ -49,6 +49,9 @@ class ChatService(QObject):
     # 进程级「回复完成」订阅（灵动岛事件动效等）：AppShell 注册一次，
     # 回调总在 GUI 线程执行（worker→本对象的链路全是 QueuedConnection）。
     _global_finished_listeners: list = []
+    # 进程级「增量」订阅（流式边收边念）：与 finished 同一纪律，回调只在 GUI 线程。
+    # 收 `(request_id, 增量文本)`；request_id 让订阅方能识别"这是新的一轮"。
+    _global_delta_listeners: list = []
 
     @classmethod
     def register_global_finished(cls, callback):
@@ -59,6 +62,16 @@ class ChatService(QObject):
     def unregister_global_finished(cls, callback):
         if callback in cls._global_finished_listeners:
             cls._global_finished_listeners.remove(callback)
+
+    @classmethod
+    def register_global_delta(cls, callback):
+        if callback not in cls._global_delta_listeners:
+            cls._global_delta_listeners.append(callback)
+
+    @classmethod
+    def unregister_global_delta(cls, callback):
+        if callback in cls._global_delta_listeners:
+            cls._global_delta_listeners.remove(callback)
 
     def __init__(self,provider=None,parent=None):
         super().__init__(parent); self.provider=provider or OpenAICompatibleProvider(); self._request_id=None; self._cancel=None; self._worker=None; self._workers=set()
@@ -136,7 +149,11 @@ class ChatService(QObject):
             self._cancel.set()
     def _current(self,rid): return (not self._detached) and rid==self._request_id
     def _delta(self,rid,text):
-        if self._current(rid): self.delta.emit(rid,text)
+        if self._current(rid):
+            self.delta.emit(rid,text)
+            for cb in list(type(self)._global_delta_listeners):
+                try: cb(rid,text)
+                except Exception: pass
     def _activity(self,rid,kind,text):
         if self._current(rid): self.activity.emit(rid,kind,text)
     def _finished(self,rid,text):

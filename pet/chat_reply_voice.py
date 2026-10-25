@@ -118,9 +118,81 @@ def split_sentences(text: str, *, max_chars: int = MAX_SENTENCE_CHARS) -> list[s
     return sentences
 
 
+#: 流式缓冲的硬上限：一直没有句末标点时（代码块、长英文串）按就近标点硬切，
+#: 免得"代码很多的回复"要等到整段结束才开口。
+STREAM_MAX_BUFFER = 160
+
+#: 流式里认作"一句说完"的字符（换行也算：列表项、代码块外的短行都该独立成句）。
+_STREAM_SENTENCE_END = "。！？!?；;…\n"
+
+#: Markdown 代码围栏标记：围栏内的内容一个字都不念（念代码没有意义，
+#: 而且流式里半截代码会被念成一串符号）。
+_FENCE_MARKS = ("```", "~~~")
+
+
+def take_stream_sentences(
+    buffer: str, *, max_chars: int = MAX_SENTENCE_CHARS
+) -> tuple[list[str], str]:
+    """从**不完整**的流式缓冲里切出已经能念的句子；返回 ``(sentences, remainder)``。
+
+    与 :func:`split_sentences` 的差别只有三点（其余语义相同）：
+
+    1. **只认句末标点**：最后那段没说完的留在 ``remainder`` 里等下一个增量，
+       绝不把半句话送去合成；
+    2. **代码围栏不念**：围栏内部整段丢弃；进围栏前的那半句（通常是"下面这段代码："）
+       先当作一句送出去，不丢前言；
+    3. **有上限**：缓冲超过 :data:`STREAM_MAX_BUFFER` 还是没成句时就按就近标点硬切，
+       让长回复也能中途开口。
+
+    缓冲尾部可能停在半个围栏标记（例如只有两个反引号）上：那种情况按"还在正文里"
+    处理，下一个增量补齐后会自动进围栏——不会把两个反引号念出来。
+    """
+    if not buffer:
+        return [], ""
+    sentences: list[str] = []
+    chunk: list[str] = []
+    in_fence = False
+    index = 0
+    size = len(buffer)
+
+    def emit(text: str) -> None:
+        piece = clean_for_speech(text)
+        if piece and any(ch.isalnum() for ch in piece):
+            sentences.append(piece)
+
+    while index < size:
+        mark = next((m for m in _FENCE_MARKS if buffer.startswith(m, index)), None)
+        if mark is not None:
+            if in_fence:
+                in_fence = False
+            else:
+                # 进围栏：前面那半句先念掉（"下面这段代码："），围栏内容随后整段丢弃。
+                emit("".join(chunk))
+                chunk.clear()
+                in_fence = True
+            index += len(mark)
+            continue
+        char = buffer[index]
+        index += 1
+        if in_fence:
+            continue
+        chunk.append(char)
+        if char in _STREAM_SENTENCE_END:
+            emit("".join(chunk))
+            chunk.clear()
+
+    remainder = "" if in_fence else "".join(chunk)
+    if len(remainder) > STREAM_MAX_BUFFER:
+        cut = max(remainder.rfind(c) for c in "，,、：: \u2014-") + 1
+        if cut < len(remainder) // 3:
+            cut = STREAM_MAX_BUFFER
+        emit(remainder[:cut])
+        remainder = remainder[cut:]
+    return sentences, remainder
+
+
 class ChatReplyReader:
     """把一条条 AI 回复拆成句子，串行送进音频通道。
-
     依赖全部是注入的，方便测试在不建 Qt 通道的前提下验证"滴灌顺序 / 不丢队列 /
     新覆盖旧"：
 
@@ -151,6 +223,10 @@ class ChatReplyReader:
         self._subscribed = False
         self._pump_scheduled = False
         self._generation = 0
+        # 流式（边收边念）状态：当前 request_id、还没成句的尾巴、这一轮是否已念过
+        self._stream_rid: str | None = None
+        self._stream_buffer = ""
+        self._stream_spoke = False
 
     # ---------------------------------------------------------------- 状态
     @property
@@ -173,14 +249,19 @@ class ChatReplyReader:
 
     # ---------------------------------------------------------------- 生命周期
     def start(self) -> bool:
-        """订阅进程级「回复完成」。返回是否本次真的订阅上了（幂等）。"""
+        """订阅进程级「回复完成」+「增量」。返回是否本次真的订阅上了（幂等）。"""
         if self._subscribed:
             return False
         service = self._chat_service()
         if service is None:
             logger.info("没有聊天模块（无聊天打包变体），助手回复朗读不订阅")
             return False
-        service.register_global_finished(self.feed)
+        service.register_global_finished(self.on_finished)
+        # 增量订阅是"边收边念"的入口；老版本 ChatService 没有这个方法时静默跳过，
+        # 退回"整段念"（与加流式之前完全一致）。
+        register_delta = getattr(service, "register_global_delta", None)
+        if callable(register_delta):
+            register_delta(self.on_delta)
         self._subscribed = True
         return True
 
@@ -192,18 +273,49 @@ class ChatReplyReader:
             service = self._chat_service()
             if service is not None:
                 try:
-                    service.unregister_global_finished(self.feed)
+                    service.unregister_global_finished(self.on_finished)
                 except Exception:
                     logger.exception("退订「助手回复朗读」失败")
+                unregister_delta = getattr(service, "unregister_global_delta", None)
+                if callable(unregister_delta):
+                    try:
+                        unregister_delta(self.on_delta)
+                    except Exception:
+                        logger.exception("退订「回复增量」失败")
         self._subscribed = False
+        self._stream_rid = None
+        self._stream_buffer = ""
         self._queue.clear()
 
     # ---------------------------------------------------------------- 数据流
+    def on_finished(self, text: str) -> None:
+        """一轮回复结束：流式念过的只补尾巴，没流过增量的按整段念（老路径）。"""
+        if not self.enabled:
+            return
+        if self._stream_rid is not None:
+            self._flush_stream(text)
+            return
+        self.feed(text)
+
+    def on_delta(self, request_id: str, text: str) -> None:
+        """收到一段增量：切出**已经成句**的部分，立刻入队开念。
+
+        为什么按句边界切、不按 token 切：TTS 一次合成一段文本，逐 token 合成会把
+        网络往返乘上几十倍，而且模型会把半句话念出来（"总之，我们需要" / "考虑…"）。
+        按句切既省请求数，又保证每句语义完整。
+        """
+        if not self.enabled:
+            return
+        if request_id != self._stream_rid:
+            self._begin_stream(request_id)
+        self._stream_buffer += str(text or "")
+        self._drain_stream()
+
     def feed(self, text: str) -> None:
         """收到一条完整回复：拆句、替换队列、开始念。"""
         if not self.enabled:
             return
-        sentences = split_sentences(text, max_chars=self._max_chars)
+        sentences = self._split(text)
         if not sentences:
             return
         # 新回复覆盖旧队列：上一轮还没念完的内容直接作废（与通道"新覆盖旧"同口径，
@@ -211,6 +323,48 @@ class ChatReplyReader:
         self._queue.clear()
         self._queue.extend(sentences)
         self.pump()
+
+    # ---------------------------------------------------------------- 流式
+    def _begin_stream(self, request_id: str) -> None:
+        """新的一轮增量：丢掉上一轮的句子与半截缓冲（新回复覆盖旧回复）。"""
+        self._stream_rid = request_id
+        self._stream_buffer = ""
+        self._stream_spoke = False
+        self._generation += 1          # 让上一轮还在飞的 pump 回调作废
+        self._pump_scheduled = False
+        self._queue.clear()
+
+    def _drain_stream(self) -> bool:
+        """把缓冲里已经成句的部分入队；返回是否真的入了队。"""
+        sentences, rest = take_stream_sentences(self._stream_buffer, max_chars=self._max_chars)
+        self._stream_buffer = rest
+        if not sentences:
+            return False
+        self._queue.extend(sentences)
+        self._stream_spoke = True
+        self.pump()
+        return True
+
+    def _flush_stream(self, full_text: str) -> None:
+        """流结束：补念缓冲里的尾巴；一次增量都没来过就退回整段念。"""
+        rest = self._stream_buffer
+        spoke = getattr(self, "_stream_spoke", False)
+        self._stream_rid = None
+        self._stream_buffer = ""
+        self._stream_spoke = False
+        tail = [s for s in self._split(rest) if s]
+        if tail:
+            self._queue.extend(tail)
+            self.pump()
+            return
+        if not spoke and full_text:
+            # 流式没来增量（非流式后端 / 旧 ChatService / 短到没有完整句）：
+            # 走原来的整段路径。已经念过一部分时绝不再整段重念。
+            self.feed(full_text)
+
+    def _split(self, text: str) -> list[str]:
+        """切句的唯一实现（气泡朗读子类在这里加"最多几句/多少字"的上限）。"""
+        return split_sentences(text, max_chars=self._max_chars)
 
     def pump(self) -> None:
         """通道空闲就送下一句；忙就排一次重试。"""

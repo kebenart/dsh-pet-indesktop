@@ -322,6 +322,9 @@ class PetSpeechBubble(QFrame):
 
     def __init__(self, parent=None, style_id: str = "classic_top"):
         super().__init__(parent)
+        # 气泡朗读的来源标识（宠物 slot / "main"）：只用于日志定位，不参与判据。
+        # 由创建方（PetWindow / SpriteBubbleFollower）在知道自己代表哪只宠时设置。
+        self._voice_owner = None
         self._interactive = False
         self._capture_compat = False
         self._capture_host: QWidget | None = None
@@ -872,6 +875,10 @@ class PetSpeechBubble(QFrame):
             return
         super().mouseReleaseEvent(event)
 
+    def set_voice_owner(self, owner) -> None:
+        """记下这条气泡代表谁（宠物 slot / "main"），供朗读日志定位。"""
+        self._voice_owner = owner
+
     def show_text(
         self,
         text: str,
@@ -975,6 +982,17 @@ class PetSpeechBubble(QFrame):
             self._hide_timer.stop()
         else:
             self._hide_timer.start(max(500, int(duration_ms)))
+        # ---- 气泡朗读的唯一汇合点 ----
+        # 自言自语 / 看看屏幕 / 余额 / 天气 / 网络 / 更新 / 审批 / 主动识屏 / 文件解读
+        # 全部经本方法上屏，所以朗读只在这里报一次（不按功能逐个接线）。
+        # 已经自己念过的链路（报时/节日/签/待办/点击台词/歌词）在上游包一层
+        # ``bubble_voice.muted()``，这里不需要知道是谁。
+        try:
+            from . import bubble_voice
+
+            bubble_voice.report(text, subtitle=subtitle, owner=self._voice_owner)
+        except Exception:
+            log.debug("气泡朗读提交失败", exc_info=True)
 
     def _layout_text_content(self, anchor_rect: QRect, *, sticky: bool, duration_ms: int = 3200,
                              preserve_paging: bool = False) -> int:

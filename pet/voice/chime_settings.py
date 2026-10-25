@@ -34,6 +34,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -68,6 +69,60 @@ from ..voice_chime_tts_panel import (
     TtsBackendPanel,
     notice_row,
 )
+
+
+class TtsVoiceNameEdit(QWidget):
+    """音色名**自由输入**（文本框）+「常用」下拉（只负责把名字填进框里）。
+
+    为什么不是 ``ModernSelect``：在线音色的清单由厂家发布，必然滞后；写死清单等于
+    用户每换一个音色就要等一次发版。这里文本框是**唯一真值**，下拉只是快捷方式，
+    选中后也落在同一个文本框里（不维护第二份状态）。
+
+    与设置页的契约和 ``ModernSelect`` 一致：对外只需 ``text()``（读）与 ``setText()``
+    （写），``_read_widget`` / ``apply_to_config`` 不需要为它加分支。菜单里只出现
+    **中文音色名**，不把音色 id / 资源号 / 错误码摆上界面（2026-10-13 机主口径）。
+    """
+
+    def __init__(self, parent, *, options=(), current: str = "",
+                 placeholder: str = "", on_edit=None) -> None:
+        super().__init__(parent)
+        self._on_edit = on_edit
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self.edit = QLineEdit(self)
+        self.edit.setPlaceholderText(placeholder or "填音色名")
+        self.edit.setText(str(current or ""))
+        self.edit.setMinimumWidth(180)
+        self.edit.editingFinished.connect(self._notify_edit)
+        layout.addWidget(self.edit, 1)
+        self.pick_button = QPushButton("常用", self)
+        self.pick_button.setObjectName("ttsVoicePickButton")
+        self.pick_button.setToolTip("从内置的常用音色里挑一个填进来")
+        menu = QMenu(self.pick_button)
+        for value, label in tuple(options or ()):
+            action = menu.addAction(str(label))
+            action.setData(value)
+            action.triggered.connect(lambda _checked=False, v=value: self._pick(v))
+        self.pick_button.setMenu(menu)
+        layout.addWidget(self.pick_button)
+        if not options:
+            self.pick_button.hide()
+
+    def text(self) -> str:
+        return self.edit.text().strip()
+
+    def setText(self, value) -> None:  # noqa: N802 - 与 QLineEdit 同名，便于替身互换
+        self.edit.setText(str(value or ""))
+
+    def _pick(self, value) -> None:
+        self.setText(value)
+        self._notify_edit()
+
+    def _notify_edit(self) -> None:
+        callback = self._on_edit
+        if callable(callback):
+            callback()
 
 
 class VoiceChimeSettingsPage(QWidget):
@@ -151,6 +206,10 @@ class VoiceChimeSettingsPage(QWidget):
         self.quote_check = ToggleSwitch(self)
         self.quote_check.setChecked(bool(self.config.get("voice_chime_show_quote", DEFAULT_SHOW_QUOTE)))
 
+        # 气泡朗读：报时以外的所有气泡（自言自语/识屏/余额/天气/审批…）念出来。
+        self.bubble_voice_check = ToggleSwitch(self)
+        self.bubble_voice_check.setChecked(bool(self.config.get("bubble_voice_enabled", False)))
+
         # ---- 自定义台词/歌词（一行一条；留空回退内置库）----
         self.custom_zh_edit = QPlainTextEdit(self)
         # 高度刻意压扁：一行一条的白名单输入，3~4 行足够看，长内容自己滚。
@@ -221,6 +280,13 @@ class VoiceChimeSettingsPage(QWidget):
                     SettingRow("voice_chime_volume", "音量", "报时的声音大小。", self.volume_spin),
                     SettingRow("voice_chime_show_bubble", "报时气泡", "报时时在头顶显示文字。", self.bubble_check),
                     SettingRow("voice_chime_show_quote", "台词/歌词", "顺带念一句台词，每天整套换新。", self.quote_check),
+                    SettingRow(
+                        "bubble_voice_enabled",
+                        "气泡朗读",
+                        "把桌宠头顶的气泡念出来：自言自语、看看屏幕、余额、天气、审批等。"
+                        "音色与上方同一套；免打扰期间不出声。",
+                        self.bubble_voice_check,
+                    ),
                     SettingRow("voice_chime_preview", "立即试听", "马上按当前配置念一句。", self.preview_btn),
                 ],
                 self,
@@ -265,6 +331,16 @@ class VoiceChimeSettingsPage(QWidget):
     def _build_field_widget(self, provider, spec: tts.TtsField) -> QWidget:
         """按字段声明造控件（select / multiline / number / flag / secret / text）。"""
         current = provider.clean(spec, self.config.get(spec.key, spec.default))
+        if spec.kind == "select" and spec.editable:
+            # 自由输入型（音色名）：文本框 + 「常用音色」下拉按钮。清单只作提示，
+            # 输入什么就存什么——在线音色由厂家发布，写死清单等于每换一个音色等一次发版。
+            return TtsVoiceNameEdit(
+                self,
+                options=spec.options,
+                current=str(current or ""),
+                placeholder=spec.placeholder or "填音色名",
+                on_edit=self._refresh_backend_controls,
+            )
         if spec.kind == "select":
             select = ModernSelect(self, width=230)
             for value, label in spec.options:
@@ -403,7 +479,13 @@ class VoiceChimeSettingsPage(QWidget):
         if spec.kind == "number":
             return widget.value()
         if spec.kind == "select":
-            return widget.currentData()
+            getter = getattr(widget, "currentData", None)
+            if callable(getter):
+                data = getter()
+                if data is not None:
+                    return data
+            # 自由输入型（TtsVoiceNameEdit）：读用户敲进去的名字
+            return widget.text()
         if spec.kind == "secret":
             return self._secret_edits.get(spec.key).text().strip() if spec.key in self._secret_edits else ""
         if spec.kind == "multiline":
@@ -449,6 +531,7 @@ class VoiceChimeSettingsPage(QWidget):
         self.config.set("voice_chime_volume", self.volume_spin.value())
         self.config.set("voice_chime_show_bubble", self.bubble_check.isChecked())
         self.config.set("voice_chime_show_quote", self.quote_check.isChecked())
+        self.config.set("bubble_voice_enabled", self.bubble_voice_check.isChecked())
         self.config.set("voice_chime_custom_quotes_zh", self.custom_zh_edit.toPlainText().strip())
         self.config.set("voice_chime_custom_quotes_en", self.custom_en_edit.toPlainText().strip())
         self.config.set("voice_chime_tts_backend", clean_backend(self.backend_select.currentData()))

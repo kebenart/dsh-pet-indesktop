@@ -83,6 +83,77 @@ recovery
 
 ## 变更记录
 
+### 2026-10-25 — 新增全局键 `bubble_voice_enabled`（「语音」域 →「语音」组一行「气泡朗读」）
+
+本刀**新增 1 个持久设置键与 1 行设置项**（所有气泡文本是否念出来），不改任何既有键的
+默认值、归属与保存语义。证据见
+[`PR-REPORT-BUBBLE-VOICE-2026-10-25.md`](PR-REPORT-BUBBLE-VOICE-2026-10-25.md)。
+
+| 项 | 本刀口径 |
+|---|---|
+| setting_id / 行键 | `bubble_voice_enabled`（行键与配置键同名，`pet/config.py::Config._initial_data`） |
+| 归属 | 「语音」域 →「语音」组，排在「台词/歌词」之后（同组的音量/报时气泡/台词都是"怎么说、说什么"；朗读是同一族的第四个维度）。不新开一级域、不新开分组 |
+| 标题 / 说明 | 「气泡朗读」/「把桌宠头顶的气泡念出来：自言自语、看看屏幕、余额、天气、审批等。音色与上方同一套；免打扰期间不出声。」 |
+| default | `False`（**关**）。主动打扰型能力默认关，与 `voice_chime_enabled` / `chat_reply_voice_enabled` / `todo_reminder_speak` 同口径；关着时用户可见行为与改动前逐字相同（`report()` 直返） |
+| 保存时机 / commit_policy | `immediate`（随设置窗关闭的既有 `_write_config` 写回，不新增写盘路径）；保存后 `AppShell._sync_chime_service()` 装/卸汇合点，无需重启 |
+| capability / 平台可用性 | 三端都创建，无平台分支。**实际出声**取决于合成后端是否可用（同语音报时）；后端不可用时只降级成"有气泡没声音" |
+| 依赖 | 依赖语音模块激活（`feature_activation.is_active("voice")`）；音频参数（音色/语速/音调/音量/后端）复用「语音报时」那一套，**不新增任何语音参数键**。各功能自带的朗读开关开着的链路会让位（报时/节日/抽签/待办/点击台词），关着时由本键接管 |
+| 迁移 | **新键**：老配置没有它 → 取默认关（升级用户呈现不变）；`Config.reload` 白名单与 `_bool_or_default` 归一同步登记（`tests/test_config_schema.py` 两份快照，字符串 `"false"` 不会被误开） |
+| 恢复 | 无需恢复路径：失败面只有写盘失败（走既有设置窗关闭闸门）与"通道拿不到"，后者只丢声音不丢气泡 |
+| 披露层级 | `primary`（就在「语音」这个常用组里，不进折叠） |
+| 默认值标记 | 行键与顶层配置键同名 ⇒ 按 `settings_default_marks` 既有回落规则自动可比默认值，勾选后出现「已修改」标记与单项重置入口 |
+| 通道生命周期 | `AppShell._chime_wanted()` 增加第七个消费者 `_bubble_voice_wanted()`。**不接这一处就是死开关**：每次设置保存 `_sync_chime_service()` 都会把通道 `stop()` 并置 `None`（同 2026-10-18 待办语音那条产品阻断） |
+| 文案单一来源 | 气泡显示与朗读用**同一段文本**（朗读就在 `show_text` 里报，不存在第二份文案）；不做语音专用文案，也就没有文案模板键 |
+| 免打扰语义 | 走 `speak(respect_quiet=True)`：免打扰（含全屏等效）期间不出声，也不在结束后补播——与提醒类同口径；点击台词/回复朗读的 `False` 是"回应刚做的动作"，有意区别 |
+| 不做 | 不新增音色/语速/音量/每宠音色键（通道级真值 + 每宠音色属下一轮）；不做"只念某些功能"的白名单（各功能自带开关已在让位表里表达）；不做流式边收边念；不给 `show_bubble`/`show_text` 加 `voice=` 形参（用 `bubble_voice.muted()`，理由见 PR 报告 §三之三） |
+
+准出对应：
+
+1. **契约**：键、默认值、归属、依赖、平台可见性、披露层级、保存时机逐条见上表；
+   旧键/旧入口/旧别名无迁移问题（新键）；失败路径（通道缺失、合成后端不可用）
+   只降级为"有气泡没声音"。
+2. **TDD**：`tests/test_bubble_voice.py` 14 例（关着零行为、碎片跳过、去重窗口
+   内外、3 句上限、Markdown 清洗、忙等滴灌、`show_text` 默认提交 / `muted()` 不提交 /
+   退出复位、嵌套静音、无朗读器空操作、装/卸摘挂、六条链路的让位标记守卫）；
+   配置侧由 `tests/test_config_schema.py` 两份快照 + 归一化路径覆盖；
+   既有消费者族（`test_voice_chime_service` / `test_todo_reminder` /
+   `test_festival` / `test_click_self_talk_speech` / `test_overlay_self_talk`）
+   原样全绿（296 passed）。
+3. **布局与可访问性**：无新增控件类型、无新增 QSS（复用 `ToggleSwitch` 与
+   `SettingRow`）；组内追加一行，行序断言族（`test_settings_page_guide` 等 371 例）
+   不改；说明写明"免打扰期间不出声"。
+4. **跨平台**：产品代码无新增平台分支；真实 GUI 验收仅本机 Windows，
+   macOS / Linux 未跑（不推断）。
+5. **视觉与文档**：本记录即变更记录；PR 报告
+   [`PR-REPORT-BUBBLE-VOICE-2026-10-25.md`](PR-REPORT-BUBBLE-VOICE-2026-10-25.md)
+   与 `docs/INDEX.md` 登记同步。
+
+#### 第二轮（同日）— 豆包音色改为「可自由输入」（无新增键，改控件形态）
+
+用户需求：「音色目前就固定几个，希望可以自己随便输入，就是豆包的，我可以输入
+火山里的声音名。」**不新增、不删除任何持久设置键**，改的是 `voice_chime_doubao_speaker`
+这一行的**控件形态与保存语义（值域放开）**。
+
+| 项 | 本刀口径 |
+|---|---|
+| 键 / 归属 | `voice_chime_doubao_speaker`（已有键，`pet/tts/doubao.py` 的字段）；仍是「语音」域 →「合成后端 → 豆包」组，位置不变 |
+| 控件形态 | 由 `ModernSelect`（固定清单）改为 `TtsVoiceNameEdit`：**文本框（唯一真值）** + 「常用」下拉（只把名字填进文本框；菜单只显示中文音色名，不露音色 id） |
+| 值域 | **放开**：任意字符串原样落盘，`clean()` 只做 trim + 空值回落默认；不做本地白名单（音色名由厂家发布，清单必然滞后）。发错由 `synth()` 报回，走既有降级路径 |
+| default / 迁移 | 默认值不变（`zh_female_peiqi_uranus_bigtts`）；**无迁移**：老配置里的音色名原样仍是当前值，只是旁边多了一个可编辑的框 |
+| 保存时机 / commit_policy | 不变（`immediate`，随设置窗关闭的既有 `_write_config`） |
+| 披露层级 | `primary`（行在「合成后端」组里，与原来同位置） |
+| 文案 | 行提示改为「豆包 2.0 音色，可自己输入。」（必须 ≤20 字，且不得含 `uranus` / 错误码等界面禁词——两条都是 `test_voice_chime_settings_layout` 的既有门禁） |
+| 可发现性 | 「常用」菜单保留 6 个内置音色（点一下填进框）；搜索词仍命中原有行（提示里保留「豆包 2.0」） |
+| 依赖 / 平台 | 无变化：三端同建，无平台分支；实际出声仍取决于 Key 与后端可用性 |
+| 恢复 | 清空文本框 = 回落默认音色（`clean` 既有语义），不算"写了个空音色"；无新增失败面 |
+| 不做 | 不做音色名在线校验（`preflight()` 不许联网）；不做每宠音色（属下一轮）；不给其它后端开自由输入（它们的清单稳定） |
+
+准出对应：① 契约见上表；② TDD：`tests/test_tts_voice_name_edit.py` 6 例 + 既有
+`test_voice_chime_settings_layout` / `test_voice_chime_mimo` / `test_voice_chime_service`
+/ `test_architecture` 全绿（语音相关族 448 passed）；③ 无新增控件类型族之外的新 QSS，
+复用 `SettingRow`/`QLineEdit`，未做截图比对（如实登记）；④ 无平台分支；
+⑤ 本记录 + PR 报告第八节 + `INDEX.md` 同步。
+
 ### 2026-10-21 — 新增一级域「功能」（功能模块启用/停用卡片，staged 语义）
 
 本刀**新增 1 个一级能力域与 1 个持久设置的可见入口**（`feature_activation` 键与迁移
@@ -764,3 +835,4 @@ recovery
    离线性能实测 / 实机运行记录）并在 [`INDEX.md`](INDEX.md) 的「PR 报告存档」登记。
    `CONTEXT.md` 无新概念需要登记（「每日一签」的口径写在 `pet/divination.py` 的模块
    docstring 与设置页文案里）。
+

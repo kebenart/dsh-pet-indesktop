@@ -70,9 +70,12 @@ class DoubaoTtsProvider(TtsProvider):
     fields = (
         TtsField(
             "voice", "voice_chime_doubao_speaker", "音色",
-            "豆包 2.0 音色。",
+            "豆包 2.0 音色，可自己输入。",
             kind="select", default="zh_female_peiqi_uranus_bigtts", options=VOICE_OPTIONS,
             allow_custom=True,
+            # 音色名由厂家发布、清单必然滞后：允许自由输入，清单只当「常用」下拉。
+            editable=True,
+            placeholder="填火山控制台里的音色名",
         ),
         TtsField(
             "pitch", "voice_chime_doubao_pitch", "音调",

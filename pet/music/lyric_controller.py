@@ -631,8 +631,12 @@ class MusicLyricController(QObject):
 
         try:
             # 时长给足一拍有余：真正的续期由每拍重新调用完成。
-            shower(text, duration_ms=POLL_MS * 2, subtitle=subtitle or None,
-                   title_first=True, width_locked=self._width_locked, reserve=False)
+            # 歌词不算"桌宠在说话"：气泡朗读必须让位，否则每拍续期都会念一遍歌词。
+            from .. import bubble_voice
+
+            with bubble_voice.muted():
+                shower(text, duration_ms=POLL_MS * 2, subtitle=subtitle or None,
+                       title_first=True, width_locked=self._width_locked, reserve=False)
             self._last_shown = (text, subtitle)
             # 首句显示完就把宽度定下来，后续同首歌不再改宽。
             self._width_locked = True

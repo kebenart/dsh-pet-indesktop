@@ -1306,6 +1306,7 @@ class Config:
             "voice_chime_custom_quotes_zh": "",  # 自定义中文台词/歌词（一行一条，留空回退内置库）
             "voice_chime_custom_quotes_en": "",  # 自定义英文台词/歌词（一行一条，留空回退内置库）
             "chat_reply_voice_enabled": False,  # 助手回复朗读（默认关：主动打扰型；复用报时服务的音频通道）
+            "bubble_voice_enabled": False,  # 气泡朗读（默认关：所有气泡文本念出来；复用同一条音频通道）
             "chat_memory_enabled": True,  # 对话全局记忆注入总开关（档 A 手动钉；关 = system 不附「关于用户的记忆」段）
             "chat_memory_auto_extract": True,  # 档 B：回复后静默自动提炼记忆（默认开：被动形成；关 = 只手动钉）
             "chat_memory_extract_interval": 5,  # 提炼频率：每 N 轮回复提炼一次（1=每轮；共创者定稿 5）
@@ -1596,6 +1597,7 @@ class Config:
             "todo_reminder_speak",
             "voice_chime_enabled",
             "chat_reply_voice_enabled",
+            "bubble_voice_enabled",
             "chat_memory_enabled",
             "chat_memory_auto_extract",
             "chat_memory_extract_interval",
@@ -2050,6 +2052,8 @@ class Config:
         self.data["todo_reminder_enabled"] = _bool_or_default(self.data.get("todo_reminder_enabled"), True)
         self.data["todo_reminder_lead_minutes"] = int(_float_or_default(self.data.get("todo_reminder_lead_minutes"), 5.0, 0.0, 60.0))
         self.data["todo_reminder_speak"] = _bool_or_default(self.data.get("todo_reminder_speak"), False)
+        # 气泡朗读：同规防字符串布尔误开（手改 "false" 不该变成开）。
+        self.data["bubble_voice_enabled"] = _bool_or_default(self.data.get("bubble_voice_enabled"), False)
         # 免打扰（issue #208）：默认时长归一到一个合法档位（手改成 7 分钟不该让
         # 菜单里一个勾选项都对不上）；布尔键同族同规，防手改字符串布尔误开。
         self.data["quiet_minutes_default"] = normalize_quiet_minutes(

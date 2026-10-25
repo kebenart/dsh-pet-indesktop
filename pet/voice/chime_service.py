@@ -1606,8 +1606,13 @@ class VoiceChimeService:
                     return
             else:
                 try:
-                    if win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS):
-                        return
+                    # 报时自己就是这条音频通道的主人：语音已由 _fire 念过，
+                    # 气泡朗读必须让位，否则同一句会被念两遍（且文本口径不同）。
+                    from .. import bubble_voice
+
+                    with bubble_voice.muted():
+                        if win.show_bubble(text, duration_ms=self.BUBBLE_DURATION_MS):
+                            return
                 except Exception:
                     logger.exception("气泡展示失败")
                 logger.warning("报时气泡未上屏（多半是提醒占着气泡位），改道桌面通知：%s", text)
@@ -1629,13 +1634,17 @@ class VoiceChimeService:
             rect = win.visible_content_rect()
             scale = getattr(win, "scale", 1.0)
             if bubble is not None and rect is not None:
-                bubble.show_text(
-                    text,
-                    rect,
-                    self.BUBBLE_DURATION_MS,
-                    pet_scale=scale,
-                    subtitle="",
-                )
+                from .. import bubble_voice
+
+                with bubble_voice.muted():
+                    bubble.show_text(
+                        text,
+                        rect,
+                        self.BUBBLE_DURATION_MS,
+                        pet_scale=scale,
+                        subtitle="",
+                    )
+                return True
                 return True
         except Exception:
             logger.exception("报时气泡降级展示失败")

@@ -459,6 +459,8 @@ class PetWindow(QWidget, WindowFeatureGateMixin):
         self._speech_bubble = PetSpeechBubble(
             style_id=str(config.get('self_talk_bubble_style', DEFAULT_SELF_TALK_BUBBLE_STYLE))
         )
+        # 气泡朗读的来源标识（legacy 单窗 = 主宠）：只用于日志定位。
+        self._speech_bubble.set_voice_owner("main")
         self._speech_bubble.set_host_on_top(bool(config.get('on_top', True)))
         self._speech_bubble.clicked.connect(self._on_speech_bubble_clicked)
         self._look_busy = False

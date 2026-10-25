@@ -216,6 +216,11 @@ class SpriteBubbleFollower:
         if self.bubble is None or not text:
             return False
         try:
+            # 气泡朗读的来源标识（哪只 sprite 在说话）：只用于日志定位。
+            try:
+                self.bubble.set_voice_owner(self._overlay._spawned_slots.get(self._sprite))
+            except Exception:
+                pass
             self.bubble.show_text(
                 text, self.anchor(), duration_ms,
                 subtitle=str(subtitle or ""),

@@ -773,12 +773,25 @@ def show_click_self_talk(host, click_name: str) -> bool:
     """
     character_id = str(host.cfg.get('character', catalog.DEFAULT_CHARACTER))
     texts = host.cfg.click_talk_texts_for(character_id, click_name)
+    # 点击台词这条链路自带「点击台词朗读」开关：开着就由它念（气泡朗读让位），
+    # 关着则交给气泡朗读，用户打开气泡朗读后点一下也能听到声音。
+    speak_here = self_talk_speak_enabled(host)
+    from . import bubble_voice
+
     if texts:
         value = random.choice(texts)
-        shown = host._show_self_talk_text(value)
+        if speak_here:
+            with bubble_voice.muted():
+                shown = host._show_self_talk_text(value)
+        else:
+            shown = host._show_self_talk_text(value)
     else:
         host._last_self_talk_text = None
-        shown = host._show_random_self_talk()
+        if speak_here:
+            with bubble_voice.muted():
+                shown = host._show_random_self_talk()
+        else:
+            shown = host._show_random_self_talk()
         value = getattr(host, "_last_self_talk_text", None)
     if shown and value:
         speak_click_self_talk(host, value)

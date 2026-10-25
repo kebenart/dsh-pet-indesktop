@@ -1401,6 +1401,10 @@ class AppShell:
         self.chat_reply_reader = None
         if self._chat_reply_voice_wanted():
             self._ensure_chat_reply_reader()
+        # 气泡朗读：所有气泡文本念出来（默认关，随通道同生共死）。
+        self.bubble_voice = None
+        if self._bubble_voice_wanted():
+            self._ensure_bubble_voice()
         # 节日提醒：进程级单例（多窗共用调度器）。**默认关闭** → 不创建服务；
         # 由用户在设置里开启后 _sync_festival_service 才创建并跑 30s tick。
         self.festival_service = None
@@ -1776,6 +1780,55 @@ class AppShell:
             and self.config.get("todo_reminder_speak", False)
         )
 
+    def _bubble_voice_wanted(self) -> bool:
+        """气泡朗读是否开启（默认关）。
+
+        与「助手回复朗读」同族：都是把文字念出来，但本开关覆盖的是**所有气泡**
+        （自言自语 / 看看屏幕 / 余额 / 天气 / 网络 / 更新 / 审批 / 主动识屏 / 文件解读），
+        不只是聊天窗回答。语音模块未激活时整条通道不该存在，故一并判。
+        """
+        if not feature_activation_mod.is_active("voice"):
+            return False
+        return bool(self.config.get("bubble_voice_enabled", False))
+
+    def _ensure_bubble_voice(self):
+        """懒创建气泡朗读器（进程级单例，装到气泡控件的汇合点上）。"""
+        if getattr(self, "bubble_voice", None) is None:
+            from . import bubble_voice
+
+            voice = bubble_voice.BubbleVoice(
+                speak=self._speak_bubble,
+                channel_idle=self._chat_reply_channel_idle,
+                enabled=self._bubble_voice_wanted,
+            )
+            bubble_voice.install(voice)
+            self.bubble_voice = voice
+        return self.bubble_voice
+
+    def _release_bubble_voice(self) -> None:
+        """先摘汇合点、再停队列：收口期不再有新的气泡文本进来。"""
+        voice = getattr(self, "bubble_voice", None)
+        if voice is None:
+            return
+        self.bubble_voice = None
+        try:
+            from . import bubble_voice
+
+            bubble_voice.uninstall(voice)
+        except Exception:
+            logging.exception("卸载气泡朗读失败")
+
+    def _speak_bubble(self, sentence: str) -> bool:
+        """把一句气泡文本送进音频通道。
+
+        ``respect_quiet=True``（默认）：气泡是"屏上顺带说一句"，免打扰期间应当
+        安静；与点击台词/回复朗读这类"回应用户刚做的动作"不同。
+        """
+        service = self.ensure_audio_channel()
+        if service is None:
+            return False
+        return bool(service.speak(sentence, log_tag="气泡朗读"))
+
     def _chime_wanted(self) -> bool:
         # 报时自身开启，或节日语音 / 点击自言自语朗读 / 抽签语音 / 待办语音播报 /
         # 助手回复朗读需要这条音频通道（六者共用一套合成与播放，因此"通道是否存在"
@@ -1791,6 +1844,7 @@ class AppShell:
             or self._divination_speak_wanted()
             or self._todo_speak_wanted()
             or self._chat_reply_voice_wanted()
+            or self._bubble_voice_wanted()
         )
 
     def _ensure_chime_service(self):
@@ -2023,9 +2077,15 @@ class AppShell:
                 self._ensure_chat_reply_reader()
             else:
                 self._release_chat_reply_reader()
+            # 气泡朗读同理：开则装到气泡汇合点，关则摘掉（不留空转队列）。
+            if self._bubble_voice_wanted():
+                self._ensure_bubble_voice()
+            else:
+                self._release_bubble_voice()
         else:
             # 顺序有意：先摘订阅再停通道，收口期不会有新句子进队列。
             self._release_chat_reply_reader()
+            self._release_bubble_voice()
             if getattr(self, "voice_chime_service", None) is not None:
                 try:
                     self.voice_chime_service.stop()
@@ -3249,6 +3309,8 @@ class AppShell:
         # 回复朗读先摘订阅再随通道一起收（它自己还挂着 ChatService 的类级订阅表，
         # 不摘就是退出期往已析构对象上回调）。
         self._release_chat_reply_reader()
+        # 气泡朗读同样先摘汇合点（摘掉后气泡再上屏也不会往队列里塞句子）。
+        self._release_bubble_voice()
         if self.voice_chime_service is not None:
             self.voice_chime_service.stop()
         # 节日提醒同为进程级懒服务，退出必须一并停（理由同 voice_chime_service）。
