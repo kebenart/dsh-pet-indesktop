@@ -1,0 +1,140 @@
+{
+  "format_version": 1,
+  "name": "小凌自言自语：豆包魅力苏菲（20 条）",
+  "provider": "doubao",
+  "speaker": "zh_female_sophie_uranus_bigtts",
+  "pitch": 15,
+  "audio_format": "mp3",
+  "install": {
+    "destination": "<应用数据目录>/self_talk_voice/",
+    "instructions": "将 ZIP 内 self_talk_voice/ 目录中的音频复制到应用数据目录下的同名目录；使用下列音色和音调配置，台词须与清单一致。此包仅含预生成音频，不会自动启用或覆盖个人配置。",
+    "voice_settings": {
+      "voice_chime_tts_backend": "doubao",
+      "voice_chime_doubao_speaker": "zh_female_sophie_uranus_bigtts",
+      "voice_chime_doubao_pitch": 15
+    },
+    "macos_data_dir": "~/Library/Application Support/dsh-pet-standalone-webm-chat/"
+  },
+  "files": [
+    {
+      "text": "主人又在忙了，小凌先不打扰～",
+      "file": "self_talk_voice/74fb759239ab92ab.mp3",
+      "bytes": 43820,
+      "sha256": "46fa0a28cfd71156af263bbe7b4b1b9b78e5b01db29d2044c491452c31520297"
+    },
+    {
+      "text": "好想吃点甜的……就一口。",
+      "file": "self_talk_voice/5d3741d80940a010.mp3",
+      "bytes": 53420,
+      "sha256": "b5d72e73eecc3bc4f8ec49a4d3b28a31b07be2eae0caa24e9d51ed99911d3022"
+    },
+    {
+      "text": "咦，窗帘好像歪了一点点。",
+      "file": "self_talk_voice/529ede487d9d0dca.mp3",
+      "bytes": 46508,
+      "sha256": "d8599b9864f08832a5a7b808ae69948472dfe746949daa590f03509e0f21d20d"
+    },
+    {
+      "text": "偷偷伸个懒腰，没人看见吧？",
+      "file": "self_talk_voice/e862747c652a8b90.mp3",
+      "bytes": 39980,
+      "sha256": "8ebe4559c01337f7134e71d77f76a8a69a3c3de6a9a1277b29ec0512c8b3f3dd"
+    },
+    {
+      "text": "主人多久没喝水啦？",
+      "file": "self_talk_voice/480c002f651ed2ee.mp3",
+      "bytes": 37292,
+      "sha256": "57d2d8529c39b4e15aae9f58743df0e77fabdc62566a6ff34e436fa2d5201349"
+    },
+    {
+      "text": "今天也认真当乖女仆！",
+      "file": "self_talk_voice/a72693af3d65c91c.mp3",
+      "bytes": 31148,
+      "sha256": "295532f918d150364c5103d42f477435925451a15bf2a3af1461192fd8c5fffc"
+    },
+    {
+      "text": "这块桌面，擦得亮亮的～",
+      "file": "self_talk_voice/2504578d2dbec609.mp3",
+      "bytes": 46892,
+      "sha256": "5d247319c5789b06f86837787c886dc9fa498a846e1002f519153b6b236fcc63"
+    },
+    {
+      "text": "呜，有点困……不能睡。",
+      "file": "self_talk_voice/ed805834ef22ea32.mp3",
+      "bytes": 69548,
+      "sha256": "6e56e1cc52304bd1134762dca4c09548f3d74f0c67e88bf8d6da3e6aeb5fb0ed"
+    },
+    {
+      "text": "主人忙起来就不理小凌了。",
+      "file": "self_talk_voice/4bc596ce0fcc95a1.mp3",
+      "bytes": 43820,
+      "sha256": "5079b27622656d1bdec31cebd044514fcd826d12af8f9edb1cd4ae82ba1cecaa"
+    },
+    {
+      "text": "小声唱一句歌，不吵到主人。",
+      "file": "self_talk_voice/0693687b64bb9c66.mp3",
+      "bytes": 39980,
+      "sha256": "27bb1cf9bb59d334f966bac68bd0dc6fdb7355d17ea24697bf0ff90d59002bbb"
+    },
+    {
+      "text": "快中午啦，主人记得吃饭哦。",
+      "file": "self_talk_voice/3970f6b511849000.mp3",
+      "bytes": 39980,
+      "sha256": "d7b959f994a28f88e62803ebfbf86b6e59c4c365b18b5d7ff32bf782939a50f5"
+    },
+    {
+      "text": "头发翘起来了，别被发现。",
+      "file": "self_talk_voice/9366e13291d2d81f.mp3",
+      "bytes": 33836,
+      "sha256": "46a7a368f82ba6c84f1a77d001298e711503da534ba796c216c1b0a820243c58"
+    },
+    {
+      "text": "说不定主人会夸小凌一下。",
+      "file": "self_talk_voice/2f8ac8f55ee12678.mp3",
+      "bytes": 40364,
+      "sha256": "6512397794dfeceb5927cecca25649df642ca9c7a48b58b152662685ac5e2f1a"
+    },
+    {
+      "text": "咦？刚才好像在想什么……",
+      "file": "self_talk_voice/a00d99d437520720.mp3",
+      "bytes": 33836,
+      "sha256": "d21a8f620cbe45356399a041e7e653b61019fa831d454acc2ffdfbd707e4f47f"
+    },
+    {
+      "text": "天气好像凉了一点点呢。",
+      "file": "self_talk_voice/613c944d4f2801e4.mp3",
+      "bytes": 33836,
+      "sha256": "b7de417aa8b0a6eacf01d3b0602e3fde15f1f4418bbef77c5bc3a35f98d94da0"
+    },
+    {
+      "text": "偷偷看一眼主人在做什么。",
+      "file": "self_talk_voice/969dc595b83f85ae.mp3",
+      "bytes": 31148,
+      "sha256": "ce9b96dbbab17718d35b83b242b358c687ce023d838f9bd767e5c1ca72d929a3"
+    },
+    {
+      "text": "小凌也是有用处的！",
+      "file": "self_talk_voice/ff892b0160bf18a8.mp3",
+      "bytes": 27308,
+      "sha256": "b6878d6eb6fd9922d87043326245b09ab8b728b352b01458ec52a6f02aab6bbb"
+    },
+    {
+      "text": "坐着坐着就想发呆啦～",
+      "file": "self_talk_voice/5fb5101152f38ffb.mp3",
+      "bytes": 44204,
+      "sha256": "3b6db05a19c6d6855e26270b8722dbc83e39078a8efb10100be8a89947ba1481"
+    },
+    {
+      "text": "该提醒主人休息一下了。",
+      "file": "self_talk_voice/bf21892b5a811d5e.mp3",
+      "bytes": 37676,
+      "sha256": "757e8ed395ae3a1118c16b2581b416419805e242a985c0fad3b6fe5647e4fcf7"
+    },
+    {
+      "text": "待机中……其实在等主人。",
+      "file": "self_talk_voice/52900baf1e06a321.mp3",
+      "bytes": 46508,
+      "sha256": "8049dd4711bb648220c70bc9ec7e5fb4a66b46ba7ed10fda6c3ff37f69a8d4df"
+    }
+  ]
+}
