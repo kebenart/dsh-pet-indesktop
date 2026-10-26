@@ -266,6 +266,7 @@ def test_page_dots_rendering():
     assert page_dots(2, 3) == "○ ○ ●"
     # 越界索引钳到最后一页
     assert page_dots(9, 2) == "○ ●"
+    assert page_dots(3, 12) == "4 / 12"
 
 
 def test_paged_bubble_uses_adaptive_dwells_and_dots():

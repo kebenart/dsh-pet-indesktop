@@ -178,7 +178,7 @@ def _row_default_value(control: QWidget, row_key: str) -> tuple[bool, object]:
     """该行的配置默认值（按控件口径换算），返回值 ``(是否可比, 默认值)``。"""
     entry = _ROW_DEFAULT_PATHS.get(row_key)
     if entry is None:
-        if row_key not in _config_default_data():
+        if row_key not in _config_default_data() and not row_key.startswith("livestream."):
             return False, None
         entry = row_key
     path, factor = entry if isinstance(entry, tuple) else (entry, 1.0)

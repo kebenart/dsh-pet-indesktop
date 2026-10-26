@@ -55,7 +55,7 @@ def test_provider_contract_basics() -> None:
     assert provider.availability({"api_key": ""}) == doubao.AVAILABILITY_CODE
     assert provider.availability({"api_key": "x"}) == ""
     values = {"voice": "zh_female_peiqi_uranus_bigtts", "pitch": 15, "api_key": "x"}
-    assert provider.flavor(values) == "doubao|zh_female_peiqi_uranus_bigtts|15"
+    assert provider.flavor(values) == "doubao|zh_female_peiqi_uranus_bigtts|15|pitch-mp3-v2"
     plan = provider.plan(values)
     assert plan["ext"] == "mp3" and plan["pitch"] == 15
     assert "x" not in provider.flavor(values), "凭据绝不许进缓存键（flavor）"
@@ -65,3 +65,53 @@ def test_provider_contract_basics() -> None:
 def test_plan_clamps_pitch(pitch: int) -> None:
     plan = doubao.PROVIDER.plan({"voice": "v", "pitch": pitch, "api_key": "x"})
     assert 0 <= plan["pitch"] <= 30
+
+
+def test_pitched_synthesis_has_same_frequency_for_atomic_temp_file(monkeypatch, tmp_path):
+    """真实ffmpeg：即时回复的.part与自言自语.mp3必须同样升调。"""
+    import io
+    import math
+    import struct
+    import wave
+
+    ffmpeg = doubao._ffmpeg()
+    if not ffmpeg:
+        pytest.skip('ffmpeg unavailable')
+    rate = 24000
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b''.join(struct.pack('<h', int(12000 * math.sin(2 * math.pi * 440 * i / rate)))
+                                for i in range(rate * 2)))
+    monkeypatch.setattr(doubao, '_fetch', lambda *args: buffer.getvalue())
+    plan = doubao.PROVIDER.plan({'api_key': 'test', 'pitch': 15})
+    frequencies = []
+    for suffix in ('.mp3', '.part'):
+        target = tmp_path / ('utterance' + suffix)
+        doubao.PROVIDER.synth('测试', plan, target)
+        result = subprocess.run([ffmpeg, '-nostdin', '-v', 'error', '-i', str(target),
+                                 '-f', 's16le', '-ac', '1', '-ar', str(rate), '-'],
+                                check=True, capture_output=True)
+        samples = struct.unpack('<' + 'h' * (len(result.stdout) // 2), result.stdout)
+        assert abs(len(samples) / rate - 2) < .15
+        middle = samples[rate // 2:rate * 3 // 2]
+        frequency = sum(a <= 0 < b for a, b in zip(middle, middle[1:]))
+        assert abs(frequency - 506) < 4, (suffix, frequency)
+        frequencies.append(frequency)
+    assert abs(frequencies[0] - frequencies[1]) <= 1
+
+
+def test_failed_pitch_never_labels_raw_audio_as_pitched(monkeypatch, tmp_path):
+    monkeypatch.setattr(doubao, '_ffmpeg', lambda: None)
+    target = tmp_path / 'audio.part'
+    with pytest.raises(doubao.TtsUnavailable):
+        doubao._write_with_pitch(b'raw', 15, target)
+    assert not target.exists()
+
+
+def test_pitched_cache_key_invalidates_old_unshifted_artifacts():
+    provider = doubao.PROVIDER
+    assert provider.flavor({'voice': 'v', 'pitch': 15}) != 'doubao|v|15'
+    assert provider.flavor({'voice': 'v', 'pitch': 0}) == 'doubao|v|0'

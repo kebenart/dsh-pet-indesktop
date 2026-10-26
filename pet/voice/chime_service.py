@@ -350,6 +350,8 @@ class _TTSWorker(threading.Thread):
                 errors.append(f"{provider.id}: 缓存换名失败")
                 self._discard_partial(temp_path)
                 continue
+            from .loudness import prepare
+            prepare(path)
             self._on_done(str(path), self._text, "")
             return
         fallback_path = str(self._paths[0]) if self._paths else ""
@@ -570,6 +572,9 @@ class VoiceChimeService:
     def stop(self) -> None:
         """停止调度；正在播放的音频一并停住，飞行中的合成结果作废（见 _on_synthesized）。"""
         self._stopped = True
+        warm_cancel = getattr(self, '_loudness_warm_cancel', None)
+        if warm_cancel is not None:
+            warm_cancel.set()
         # 正在出声的这一段必须立刻停：关掉开关/退出后继续放完，用户听到的就是
         # "关不掉"；退出路径上播放器还可能正被析构。
         self._stop_current_segment()
@@ -607,6 +612,9 @@ class VoiceChimeService:
         self._precache_bubble = None
         self._precache_path = None
         self._prune_cache()
+        if getattr(self, '_loudness_warm_cancel', None) is None:
+            from .loudness import warm_cached_audio
+            self._loudness_warm_cancel = warm_cached_audio((self._cache_dir, self._cache_dir.parent / 'self_talk_voice'))
 
     # ------------------------------------------------------------ 对外入口
     def say_now(self, text: str = "") -> None:
@@ -1239,7 +1247,8 @@ class VoiceChimeService:
             from PySide6.QtCore import QUrl
 
             self._audio_out.setVolume(self._cfg["volume"] / 100.0)
-            self._player.setSource(QUrl.fromLocalFile(path))
+            from .loudness import playback_path
+            self._player.setSource(QUrl.fromLocalFile(playback_path(path)))
             self._player.play()
             # play 出口即置位"已发出 play、未见终止态"（见 _player_engaged）：
             # 从这一刻到终止态之间，枚举判据在 LoadedMedia 窗口里会漏判。
@@ -1266,7 +1275,8 @@ class VoiceChimeService:
             from PySide6.QtCore import QUrl
 
             self._audio_out.setVolume(self._cfg["volume"] / 100.0)
-            self._player.setSource(QUrl.fromLocalFile(path))
+            from .loudness import playback_path
+            self._player.setSource(QUrl.fromLocalFile(playback_path(path)))
             self._player.play()
             self._mark_play_pending()
             return True
@@ -1444,6 +1454,12 @@ class VoiceChimeService:
         self._fire(pending, datetime.now(), None, show_bubble=False, role="speak",
                    respect_quiet=respect_quiet)
 
+    def _on_playback_state(self, state) -> None:
+        player = self._player
+        if player is not None:
+            logger.info('语音播放器状态=%s 进度=%sms 音源=%s', getattr(state, 'name', str(state)),
+                        player.position(), player.source().fileName())
+
     def _ensure_player(self) -> bool:
         if self._player is not None:
             return True
@@ -1453,6 +1469,8 @@ class VoiceChimeService:
             self._player = QMediaPlayer()
             self._audio_out = QAudioOutput()
             self._player.setAudioOutput(self._audio_out)
+            if hasattr(self._player, 'playbackStateChanged'):
+                self._player.playbackStateChanged.connect(self._on_playback_state)
             # 缓存终止态枚举，供 _on_media_status 判空时使用（见该方法的说明）。
             self._terminal_statuses = (
                 QMediaPlayer.MediaStatus.EndOfMedia,

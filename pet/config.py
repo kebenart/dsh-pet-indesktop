@@ -1114,6 +1114,7 @@ class Config:
         ``__init__`` 与 :meth:`reset_to_defaults` 共用本方法：默认值只此一份，
         重置设置必须与首次启动落在同一组值上（两份字面量迟早会漂移）。
         """
+        from .livestream.rules import LiveSettings
         return {
             "version": 4,
             # 功能模块激活集合（SPEC：.scratch/feature-modules/SPEC.md）：
@@ -1285,6 +1286,7 @@ class Config:
             "proactive_screen": _default_proactive_screen_data(),
             "agent_link": _default_agent_link_data(),
             "file_interpret": _default_file_interpret_data(),
+            "livestream": LiveSettings().to_dict(),  # 全局，默认关闭
             "chat_ui_style": "modern",  # modern / classic（仅聊天窗口保留双实现）
             "chat_follow_pet": False,  # 聊天窗口是否跟随桌宠移动
             "system_notifications_enabled": True,  # 对话完成/失败/需要授权时弹桌面系统通知
@@ -1597,6 +1599,7 @@ class Config:
             "todo_reminder_speak",
             "voice_chime_enabled",
             "chat_reply_voice_enabled",
+            "livestream",
             "bubble_voice_enabled",
             "chat_memory_enabled",
             "chat_memory_auto_extract",
@@ -1946,6 +1949,8 @@ class Config:
                     stack.append(value)
 
     def _normalize_pet_settings(self):
+        from .livestream.rules import LiveSettings
+        self.data["livestream"] = LiveSettings.from_dict(self.data.get("livestream")).to_dict()
         target = str(self.data.get("harness_launch_target") or "auto").strip().lower()
         self.data["harness_launch_target"] = target if target in ("auto", "service", "web", "desktop") else "auto"
         dialogue_mode = str(self.data.get("dialogue_mode") or "legacy").lower()
@@ -2264,6 +2269,7 @@ class Config:
             "drop_gravity",
             "agent_link",
             "file_interpret",
+            "livestream",
             "idle_low_fps_enabled",
             "idle_low_fps_threshold",
             "media_prewarm",

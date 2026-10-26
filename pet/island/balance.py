@@ -112,6 +112,7 @@ def fetch_balance(base_url: str, api_key: str, timeout: float = 10.0,
     return {
         'is_available': bool(data.get('is_available', True)),
         'total': str(info.get('total_balance', '')),
+        'currency': str(info.get('currency', '')),
         'granted': str(info.get('granted_balance', '')),
         'topped_up': str(info.get('topped_up_balance', '')),
     }

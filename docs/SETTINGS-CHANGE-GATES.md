@@ -836,3 +836,26 @@ recovery
    `CONTEXT.md` 无新概念需要登记（「每日一签」的口径写在 `pet/divination.py` 的模块
    docstring 与设置页文案里）。
 
+
+
+## 2026-10-26：直播营业
+
+归属 AI与对话→直播营业，能力依赖chat和voice，单层advanced披露，沿用设置完成保存、取消丢弃，保存后重建服务并默认暂停回复。搜索别名直播/弹幕/礼物。三端共享配置，实机只验macOS。
+
+| 键（livestream.前缀） | 默认与语义 |
+|---|---|
+| enabled、room、endpoint、collector_program | false、空、ws://127.0.0.1:1088/ws、空；本机采集服务，只接受数字网页房间号 |
+| prompt、blocked_words、blocked_users、mention | 独立小肥鱼人设、内置过滤词、空、空；与日常系统提示隔离 |
+| reply_interval、user_cooldown | 8秒、15秒；限制模型回复频率 |
+| gift_dance_min、dance_cooldown | 同组2个、30秒；复用现有舞蹈 |
+| music_dir、dance_music、allow_song_requests | 空（内置8首）、小肥鱼营业曲、false；本地曲目 |
+| music_volume、action_music_enabled | 25、true；语音时自动降低配乐 |
+| gift_music、action_music | 内置礼物/动作到曲目映射，每行名称=曲名 |
+
+旧配置缺失livestream时按默认关闭，非法端点回退本机，布尔仅接受真正true；新增字段不影响原日常聊天。关闭直播开关可恢复，SQLite账本保留。主播控制台的开始/暂停、停止音乐和显示观众牌是现场命令，不重复加入设置。测试与实机限制见本日直播报告；全量仍有三项已复现基线失败，未声称准出全绿。
+
+### 直播收入人民币估算补充
+
+新增livestream.income_share_percent（0～100，默认0表示未设置）及diamonds_per_yuan（1～1000，默认10，为暂定换算基数）。同属直播高级设置，关闭设置时保存并重建服务。观众牌不显示钻，展示今日预计到手¥金额，公式为原始价值÷每元钻数×分成百分比，Decimal四舍五入到分；未设置分成显示待配置。主播保留原始钻数以便对账。真实账号未核实，用户要求按最低估算，本机暂配30%，明确标注“暂按30%估算、未扣税费、以平台结算为准”；不是平台承诺的最低比例。官方钻石协议仅说明按账号产品页面比例结算。已有钻数账本不重写，换算比例调整会重新估算当日总额，不是按事件历史费率分段计费。
+
+用户最终指定10:1直接换算，本机income_share_percent改为100，取消上一节暂配30%。观众牌仅显示“今日收入/元”；主播保留换算说明。音色常用列表追加用户指定三项，不影响当前音色与持久键。

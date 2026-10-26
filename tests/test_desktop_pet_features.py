@@ -1443,7 +1443,7 @@ def test_modern_settings_panel_uses_sidebar_and_includes_ai_settings(tmp_path, m
     assert isinstance(dialog.speed_select, settings_mod.ModernSelect)
     assert isinstance(dialog.bubble_style_select, settings_mod.ModernSelect)
     assert [dialog.bubble_style_select.itemText(index) for index in range(dialog.bubble_style_select.count())] == [
-        "经典暖黄 · 正上方",
+        "奶油云朵 · 正上方",
         "纸感卡片 · 左上方",
         "深色玻璃 · 右上方",
         "柔蓝对话 · 正上方",

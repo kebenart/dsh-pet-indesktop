@@ -58,6 +58,7 @@ RELOAD_WHITELIST_SNAPSHOT = frozenset(
         "chat_memory_extract_interval",
         "chat_memory_enabled",
         "chat_reply_voice_enabled",
+        "livestream",
         "chat_ui_style",
         "click_show_balance",
         "click_show_self_talk",

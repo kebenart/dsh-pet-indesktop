@@ -1845,7 +1845,36 @@ class AppShell:
             or self._todo_speak_wanted()
             or self._chat_reply_voice_wanted()
             or self._bubble_voice_wanted()
+            or self._livestream_wanted()
         )
+
+    def _livestream_wanted(self) -> bool:
+        from .livestream.rules import LiveSettings
+        return (getattr(self, "enable_chat", True)
+                and feature_activation_mod.is_active("chat")
+                and feature_activation_mod.is_active("voice")
+                and LiveSettings.from_dict(self.config.get("livestream")).enabled)
+
+    def _sync_livestream(self) -> None:
+        from .livestream.rules import LiveSettings
+        current = getattr(self, "livestream_service", None)
+        settings = LiveSettings.from_dict(self.config.get("livestream"))
+        wanted = self._livestream_wanted()
+        if current is not None and (not wanted or current.settings != settings):
+            stopped = current.shutdown()
+            # ChatService 取消后可能仍有 worker 校尾；保留 QObject，禁止运行中析构。
+            retired = getattr(self, "_retired_livestream", [])
+            if not stopped:
+                retired.append(current)
+            else:
+                current.deleteLater()
+            self._retired_livestream = retired
+            self.livestream_service = None
+            current = None
+        if wanted and current is None:
+            from .livestream.service import LiveService
+            self.livestream_service = LiveService(self)
+            self.livestream_service.start()
 
     def _ensure_chime_service(self):
         """懒创建语音报时服务（报时 / 手动触发 / 节日语音播报共用）。"""
@@ -2092,6 +2121,8 @@ class AppShell:
                 except Exception:
                     logging.exception("停止语音报时服务失败")
                 self.voice_chime_service = None
+
+        self._sync_livestream()
 
     # ------------------------------------------------------------ 功能门控（节日提醒）
     def _festival_wanted(self) -> bool:
@@ -2971,6 +3002,9 @@ class AppShell:
         # 关句柄，O(1)、不派生进程、不写盘；不显式释放则只剩"进程被拆掉后由
         # OS 回收句柄 + 下次启动按 QLockFile pid 陈旧判定接管"这条兜底链。
         self._release_overlay_gate()
+        live = getattr(self, "livestream_service", None)
+        if live is not None:
+            live.shutdown()
         stopped = 0
         for inst in self._instances:
             win = getattr(inst, "win", None)
@@ -3225,6 +3259,9 @@ class AppShell:
         # 退出标记（R2 第五缺口）：在途自动拉起 worker 凭它中止或补偿收口——
         # 否则「退出时登记表为空 → worker 随后 spawn 登记」会留下永远无人收的进程。
         self._quitting = True
+        live = getattr(self, "livestream_service", None)
+        if live is not None:
+            live.shutdown()
         self._flush_chat_memory_hits()
         # 窗级收口：逐窗保存位置、停本窗预热与 Agent、提交本窗会话
         for inst in self._instances:

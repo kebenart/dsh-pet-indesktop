@@ -58,6 +58,9 @@ VOICE_OPTIONS = (
     ("zh_female_yingtaowanzi_uranus_bigtts", "樱桃丸子"),
     ("zh_female_vv_uranus_bigtts", "Vivi（通用女声）"),
     ("zh_female_sophie_uranus_bigtts", "魅力苏菲"),
+    ("zh_female_roumeinvyou_uranus_bigtts", "柔美女音"),
+    ("zh_female_qingchezizi_uranus_bigtts", "清澈欣欣"),
+    ("zh_female_qinqienv_uranus_bigtts", "亲切女声音"),
 )
 
 
@@ -102,7 +105,10 @@ class DoubaoTtsProvider(TtsProvider):
     def flavor(self, values: dict) -> str:
         # 只放影响音频内容的参数（凭据不进缓存键）
         speaker = str(values.get("voice") or "").strip() or "zh_female_peiqi_uranus_bigtts"
-        return f"doubao|{speaker}|{max(0, min(30, _as_int(values.get('pitch'), 15)))}"
+        pitch = max(0, min(30, _as_int(values.get('pitch'), 15)))
+        # 旧即时合成的.part输出曾静默跳过升调；不能再按相同缓存键复用。
+        revision = '|pitch-mp3-v2' if pitch else ''
+        return f"doubao|{speaker}|{pitch}{revision}"
 
     def availability(self, values: dict) -> str:
         return "" if str(values.get("api_key") or "").strip() else AVAILABILITY_CODE
@@ -201,8 +207,7 @@ def _write_with_pitch(audio: bytes, pitch_pct: int, out_path: Path) -> None:
         return
     ffmpeg = _ffmpeg()
     if not ffmpeg:
-        out_path.write_bytes(audio)          # 没有 ffmpeg 就退回原音，不静默失败
-        return
+        raise TtsUnavailable(AVAILABILITY_CODE, "升调需要ffmpeg，未生成未升调的替代音频")
     factor = 1.0 + pitch_pct / 100.0
     source = Path(tempfile.mkdtemp(prefix="dsh-pet-doubao-")) / "raw.mp3"
     source.write_bytes(audio)
@@ -212,13 +217,13 @@ def _write_with_pitch(audio: bytes, pitch_pct: int, out_path: Path) -> None:
     try:
         subprocess.run(
             [ffmpeg, "-y", "-loglevel", "quiet", "-i", str(source),
-             "-af", filter_chain, "-b:a", "128k", str(out_path)],
+             "-af", filter_chain, "-b:a", "128k", "-f", "mp3", str(out_path)],
             check=True, timeout=TIMEOUT_S,
             # 绝不弹控制台黑窗：机主对"又弹一个窗口"有明文红线（同 agent_link / harness_launcher 的写法）
             **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}),
         )
-    except Exception:
-        out_path.write_bytes(audio)          # 变调失败不阻断播报
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise TtsUnavailable(AVAILABILITY_CODE, "豆包语音升调失败，未使用未升调的替代音频") from exc
     finally:
         shutil.rmtree(source.parent, ignore_errors=True)
 

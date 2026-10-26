@@ -97,7 +97,7 @@ class ProviderError(RuntimeError):
     def __init__(self,message,status=None): self.status=status; super().__init__(f'HTTP {status}: {message}' if status else message)
 
 class SSEParser:
-    def __init__(self): self._buffer=b''; self.done=False; self.finish_reason=None
+    def __init__(self): self._buffer=b''; self.done=False; self.finish_reason=None; self.usage=None
     def feed_events(self,chunk:bytes):
         self._buffer+=chunk
         if len(self._buffer)>1024*1024: raise ProviderError('SSE 缓冲超过 1MB 上限（服务端未按事件分隔）')  # 审查 GLM-M5：防异常 provider 无界堆积
@@ -119,6 +119,7 @@ class SSEParser:
             except json.JSONDecodeError as exc: raise ProviderError('Provider 返回了无效 JSON') from exc
             if isinstance(payload,dict) and payload.get('error'):
                 err=payload['error']; msg=err.get('message','Provider 返回错误') if isinstance(err,dict) else str(err); raise ProviderError(str(msg))
+            if isinstance(payload,dict) and isinstance(payload.get('usage'),dict): self.usage=payload['usage']
             choices=payload.get('choices',[]) if isinstance(payload,dict) else []
             if choices and isinstance(choices[0],dict):
                 delta=choices[0].get('delta',{}) or {}
@@ -234,6 +235,7 @@ class OpenAICompatibleProvider:
 
     def _stream_answer(self,messages,config,cancel_event,response_holder):
         payload:dict[str,Any]={'model':config.model,'messages':messages,'stream':True,'temperature':config.temperature,'max_tokens':config.max_tokens}
+        if getattr(config, 'collect_usage', False): payload['stream_options']={'include_usage':True}
         payload.update(thinking_payload(config))
         response=self._open(payload,config,'text/event-stream')
         if response_holder is not None:
@@ -253,6 +255,8 @@ class OpenAICompatibleProvider:
         finally:
             try: response.close()
             except Exception: pass
+        if getattr(config, 'collect_usage', False) and parser.usage is not None:
+            yield StreamEvent('usage', json.dumps(parser.usage))
         if got_reasoning and not got_content and parser.finish_reason=='length' and not cancel_event.is_set():
             raise ProviderError(f'深度思考用完了「最大输出 Token」（当前 {config.max_tokens}），还没来得及给出回答。请在 AI 设置 → 生成参数里调大（建议 8192 以上）。')
 

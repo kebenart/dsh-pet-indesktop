@@ -11,6 +11,7 @@ class _Worker(QThread):
     delta_received=Signal(str); completed=Signal(str); failed=Signal(str); stopped_by_user=Signal()
     # 非正文事件：(kind, text)，kind 为 'reasoning'（思考过程）或 'status'（联网进度）
     activity_received=Signal(str,str)
+    usage_received=Signal(str)
     def __init__(self,provider,messages,config,cancel):
         super().__init__()
         self.provider=provider; self.messages=messages; self.config=config; self.cancel=cancel; self.parts=[]
@@ -30,6 +31,8 @@ class _Worker(QThread):
             for text in self.provider.stream(self.messages,self.config,self.cancel,**stream_kwargs):
                 if self.cancel.is_set(): self.stopped_by_user.emit(); return
                 if isinstance(text,StreamEvent):
+                    if text.kind == 'usage':
+                        self.usage_received.emit(text.text); continue
                     if text.text: self.activity_received.emit(text.kind,text.text)
                     continue
                 self.parts.append(text); self.delta_received.emit(text)
@@ -46,6 +49,7 @@ class ChatService(QObject):
     started=Signal(str); delta=Signal(str,str); finished=Signal(str,str); error=Signal(str,str); stopped=Signal(str)
     # (request_id, kind, text)：kind='reasoning' 思考过程增量 / 'status' 联网检索进度
     activity=Signal(str,str,str)
+    usage=Signal(str,str)
     # 进程级「回复完成」订阅（灵动岛事件动效等）：AppShell 注册一次，
     # 回调总在 GUI 线程执行（worker→本对象的链路全是 QueuedConnection）。
     _global_finished_listeners: list = []
@@ -73,9 +77,10 @@ class ChatService(QObject):
         if callback in cls._global_delta_listeners:
             cls._global_delta_listeners.remove(callback)
 
-    def __init__(self,provider=None,parent=None):
+    def __init__(self,provider=None,parent=None,*,publish_global=True):
         super().__init__(parent); self.provider=provider or OpenAICompatibleProvider(); self._request_id=None; self._cancel=None; self._worker=None; self._workers=set()
         self._detached=False
+        self.publish_global=publish_global
         # 档 B 记忆提炼（pet/chat/memory_extract）：前端在构造后挂 hook
         # （(user_text, reply_text, provider, provider_config) -> None），
         # finished 路径在发完信号后同步调一次——hook 内部只做护栏检查并起后台线程。
@@ -132,6 +137,7 @@ class ChatService(QObject):
         # _request_id 读写构成数据竞态。队列投递保证回调只在 GUI 线程跑。
         worker.delta_received.connect(lambda text,rid=rid:self._delta(rid,text), Qt.QueuedConnection)
         worker.activity_received.connect(lambda kind,text,rid=rid:self._activity(rid,kind,text), Qt.QueuedConnection)
+        worker.usage_received.connect(lambda text,rid=rid:self.usage.emit(rid,text) if self._current(rid) else None, Qt.QueuedConnection)
         worker.completed.connect(lambda text,rid=rid:self._finished(rid,text), Qt.QueuedConnection)
         worker.failed.connect(lambda text,rid=rid:self._error(rid,text), Qt.QueuedConnection)
         worker.stopped_by_user.connect(lambda rid=rid:self._stopped(rid), Qt.QueuedConnection)
@@ -151,7 +157,7 @@ class ChatService(QObject):
     def _delta(self,rid,text):
         if self._current(rid):
             self.delta.emit(rid,text)
-            for cb in list(type(self)._global_delta_listeners):
+            for cb in list(type(self)._global_delta_listeners) if self.publish_global else []:
                 try: cb(rid,text)
                 except Exception: pass
     def _activity(self,rid,kind,text):
@@ -159,7 +165,7 @@ class ChatService(QObject):
     def _finished(self,rid,text):
         if self._current(rid):
             self.finished.emit(rid,text)
-            for cb in list(type(self)._global_finished_listeners):
+            for cb in list(type(self)._global_finished_listeners) if self.publish_global else []:
                 try: cb(text)
                 except Exception: pass
             self._maybe_extract_memory(text)

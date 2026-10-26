@@ -51,11 +51,11 @@ def bubble_wrap_width(column: int = BUBBLE_TEXT_COLUMN, slack: int = BUBBLE_TEXT
 # 只放大气泡会让文字看起来更小（两者必须同一个系数）。
 BUBBLE_TEXT_SCALE_MIN = 0.5
 BUBBLE_TEXT_SCALE_MAX = 3.0
-# 各形态的基础字号（px），也是缩放前的原值：正文 13 / 副标题与页码 10 /
-# 标题态副标题 11。绘制侧按同一系数取整，度量侧从 label.font() 读回。
-BUBBLE_BODY_FONT_PX = 13
-BUBBLE_SUBTITLE_FONT_PX = 10
-BUBBLE_TITLE_FONT_PX = 11
+# 各形态的基础字号（px）：直播可读性口径，系统提示和自言自语同样放大。
+# 绘制侧按同一系数取整，度量侧从 label.font() 读回。
+BUBBLE_BODY_FONT_PX = 24
+BUBBLE_SUBTITLE_FONT_PX = 16
+BUBBLE_TITLE_FONT_PX = 20
 
 
 def clamp_bubble_text_scale(scale: float) -> float:
@@ -552,6 +552,8 @@ def page_dots(index: int, total: int) -> str:
     if total <= 1:
         return ""
     index = max(0, min(int(index), total - 1))
+    if total > 5:
+        return f'{index + 1} / {total}'
     return " ".join("●" if i == index else "○" for i in range(total))
 
 

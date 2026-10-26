@@ -22,6 +22,7 @@ import sys
 log = logging.getLogger(__name__)
 from math import ceil, floor
 from pathlib import Path
+from .bubble_appearance import cute_font
 
 from PySide6.QtCore import (
     QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer,
@@ -284,9 +285,9 @@ class FlowLayout(QLayout):
 # anchor.  They are not colour-only aliases of the legacy bubble.
 BUBBLE_STYLE_PRESETS = {
     "classic_top": {
-        "label": "经典暖黄 · 正上方", "placement": "top",
-        "background": "#fffaf0", "border": "#efc261", "foreground": "#403725",
-        "radius": 14, "shadow": "#6b542b",
+        "label": "奶油云朵 · 正上方", "placement": "top",
+        "background": "#fffefa", "border": "#eae4df", "foreground": "#403d46",
+        "radius": 20, "shadow": "#746a65",
     },
     "paper_left": {
         "label": "纸感卡片 · 左上方", "placement": "top_left",
@@ -490,6 +491,8 @@ class PetSpeechBubble(QFrame):
         self.set_style(self._style_id)
 
     def set_style(self, style_id: str) -> None:
+        for label in (self.label, self._subtitle_label, self._page_indicator):
+            label.setFont(cute_font())
         self._style_id = style_id if style_id in BUBBLE_STYLE_PRESETS else "classic_top"
         self._preset = BUBBLE_STYLE_PRESETS[self._style_id]
         if self._preset.get("shape") == "breath_bubble":
@@ -763,7 +766,8 @@ class PetSpeechBubble(QFrame):
             # 超长副标题不允许把水泡顶成整屏，放不下时按既有口径裁切。
             needed_inner = label_height + reserve
             height = int(ceil(needed_inner * 195 / 95))
-            cap = int(round(BREATH_CANVAS_MAX_W * self._text_scale))
+            # 放大字体后副标题存在不可再缩的行高；50%下仍要给内容一个可读的最小画布。
+            cap = int(round(BREATH_CANVAS_MAX_W * max(1.0, self._text_scale)))
             width = max(size.width(), min(cap, int(round(height * 240 / 195))))
             grown = QSize(width, int(width * 195 / 240 + 0.5))
             if grown == size:
@@ -1039,11 +1043,20 @@ class PetSpeechBubble(QFrame):
             # 换行预算必须与下面 bubble_label_size 用**同一个**列宽/余量：
             # 两者一旦分叉（如放大后一处用旧列宽），label 会比真实行窄、行尾
             # 那个字被切在边界上——看起来就像被气泡挡掉了。
+            max_lines = bubble_max_lines(text, keep_breaks=self._multi_line)
+            if not interactive and not sticky:
+                # 字号放大后先按屏幕高度收紧每页行数，不能靠把整窗挤出屏幕容纳文字。
+                margins = self._layout.contentsMargins()
+                self._page_indicator.ensurePolished()
+                overhead = (margins.top() + margins.bottom() + max(0, self._layout.spacing()) * 2 + 12
+                            + QFontMetrics(self._page_indicator.font()).lineSpacing()
+                            + QFontMetrics(self._subtitle_label.font()).lineSpacing() * bool(subtitle))
+                max_lines = min(max_lines, max(1, (self._available_geometry(anchor_rect).height() - overhead) // metrics.lineSpacing()))
             pages = paginate_bubble_text(
                 metrics,
                 text,
                 bubble_wrap_width(column, text_slack),
-                bubble_max_lines(text, keep_breaks=self._multi_line),
+                max_lines,
                 keep_breaks=self._multi_line,
             )
             page_index = min(self._page_index, len(pages) - 1) if preserve_paging and pages else 0

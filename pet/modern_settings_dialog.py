@@ -1990,8 +1990,11 @@ class ModernSettingsDialog(QDialog):
             if section.rows and all(row.isHidden() for row in section.rows):
                 section.setVisible(False)
 
+        self.live_editor = None
         ai_sections = None
         if self.ai_page is not None:
+            from .livestream.settings import LiveSettingsEditor
+            self.live_editor = LiveSettingsEditor(self.config)
             balance_rows = claim_prefix("balance_")
             # 照常 claim（防掉「待分类」并保有控件），挂载与否由语音模块决定
             chat_reply_voice_rows = claim("chat_reply_voice_enabled")
@@ -2002,6 +2005,7 @@ class ModernSettingsDialog(QDialog):
             )
             ai_sections = page_content(
                 [
+                    ("直播营业", self.live_editor.rows, True),
                     ("API 列表", claim("provider_list")),
                     (
                         "模型与连接",
@@ -2602,6 +2606,8 @@ class ModernSettingsDialog(QDialog):
         # 快捷启动模块未激活：「快捷启动」标签未挂出，编辑器值不写回
         if _fa.is_active("quick_launch"):
             self.config.set("quick_launch_apps", self.quick_launch_editor.apps())
+        if self.live_editor is not None:
+            self.config.set("livestream", self.live_editor.value())
         if self.ai_page is not None:
             self.ai_page.save()
         settings_file_interpret.save_file_interpret_settings(self)
